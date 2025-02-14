@@ -299,8 +299,9 @@ app.post('/getcalldetails', async (req, res) => {
 
         // change here from const lastcall to getcallDetails.json
 
-        const lastCall = await fetch(`https://api.bland.ai/v1/calls?to=${number}&ascending=false`, options);
+        const lastCall = await fetch(`https://api.bland.ai/v1/calls?to_number=${number}&ascending=false`, options);
         const callData = await lastCall.json();
+
 
         // Check if calls exist
         if (!callData.calls || callData.calls.length === 0) {
@@ -308,6 +309,7 @@ app.post('/getcalldetails', async (req, res) => {
         }
 
         const c_id = callData.calls[0].c_id;  // ✅ This will now always be valid
+
 
         const getCallDetails = await fetch(`https://api.bland.ai/v1/calls/${c_id}`, options);
         const callDetails = await getCallDetails.json();
@@ -341,7 +343,7 @@ app.post('/getcalldetails', async (req, res) => {
             structuredTranscript
         };
 
-        console.log(lastCallData);
+        console.log("lastcalldata ", lastCallData);
 
         // Send limited response
         res.json({
