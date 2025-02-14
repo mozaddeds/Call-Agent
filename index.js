@@ -309,9 +309,6 @@ app.post('/getcalldetails', async (req, res) => {
 
         const number = req.body.number
 
-        
-        console.log("req \n", req);
-
         const options = {
             method: 'GET',
             headers: {
@@ -320,12 +317,25 @@ app.post('/getcalldetails', async (req, res) => {
             },
         };
 
-        const callDetails = await fetch(`https://api.bland.ai/v1/calls?to=${number}&ascending=false`, options);
-        const callData = await callDetails.json();
+        const lastCall = await fetch(`https://api.bland.ai/v1/calls?to=${number}&ascending=false`, options);
 
-        console.log(callData);
+        
+        const callData = await lastCall.json();
+        const c_id = callData.calls[0].c_id;
+        
+        const getCallDetails = await fetch(`https://api.bland.ai/v1/calls/${c_id}`, options)
 
-        const { call_id, to, from, started_at, end_at, summary, price, call_ended_by, status, transcripts } = callData;
+        const callDetails = await getCallDetails.json();
+
+        console.log("call data \n", callDetails);
+
+        // console.log("call details \n\n", callDetails)
+
+        
+
+        
+
+        const { call_id, to, from, started_at, end_at, summary, price, call_ended_by, status, transcripts } = callDetails;
 
 
         // Process date, time, and duration
@@ -334,7 +344,7 @@ app.post('/getcalldetails', async (req, res) => {
 
         const { startTime, startDate, endTime, endDate, duration } = infoDateTime;
 
-        console.log(infoDateTime);
+        console.log("info date time ", infoDateTime);
 
         // Store call data for the `/calldetails` endpoint
         lastCallData = {
