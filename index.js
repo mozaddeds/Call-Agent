@@ -2,7 +2,13 @@ import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
 import 'dotenv/config';
+
 import twilio from 'twilio';
+
+import { google } from 'googleapis';
+import { readFile } from 'fs/promises';
+
+
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -13,6 +19,64 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 
 const callKey = process.env.callKey
+
+const credentialsPath = './credentials.json';
+
+async function authorize() {
+    const credentials = JSON.parse(await readFile(credentialsPath, 'utf8'));
+    const { client_email, private_key } = credentials;
+
+    const auth = new google.auth.JWT(client_email, null, private_key, ['https://www.googleapis.com/auth/spreadsheets']);
+    return auth;
+}
+
+
+async function appendToSheet(data) {
+    try {
+        const auth = await authorize();
+        const sheets = google.sheets({ version: 'v4', auth });
+
+        const spreadsheetId = process.env.spreadsheetId; // Replace with your Google Sheet ID
+        const range = 'Sheet1!A2:N'; // Start from row 2 to avoid overwriting headers
+
+        // Convert structuredTranscript to a string or JSON string (depending on what you need)
+        const structuredTranscriptStr = JSON.stringify(data.structuredTranscript);
+
+        // Format the data as a 2D array for Google Sheets
+        const values = [
+            [
+                data.call_id, 
+                data.to, 
+                data.from, 
+                data.startTime, 
+                data.startDate, 
+                data.endTime, 
+                data.endDate, 
+                data.duration, 
+                data.summary, 
+                data.price, 
+                data.call_ended_by, 
+                data.status, 
+                structuredTranscriptStr  // Adding the structured transcript as a string
+            ]
+        ];
+
+        const request = {
+            spreadsheetId,
+            range,
+            valueInputOption: 'RAW',
+            insertDataOption: 'INSERT_ROWS',
+            resource: { values },
+        };
+
+        const response = await sheets.spreadsheets.values.append(request);
+        console.log('Data successfully added to Google Sheet:', response.data);
+    } catch (error) {
+        console.error('Error appending data to Google Sheet:', error);
+    }
+}
+
+
 
 function processDateTime(startTimestamp, endTimestamp = null) {
     function formatDateTime(timestamp) {
@@ -119,27 +183,19 @@ app.post('/sendaicall', async (req, res) => {
         const { prompt, number, voice, backgroundNoise } = req.body;
 
         if (!prompt || !number) {
-            return res.status(400).json({
-                message: "Incomplete fields. 'prompt' and 'number' are required."
-            });
+            return res.status(400).json({ message: "Missing required fields: 'prompt' and 'number'." });
         }
 
         let aiVoice = voice === "Male" ? "Derek" : "Paige";
         let background = backgroundNoise || "none";
 
-        console.log(`Prompt: ${prompt}`);
-        console.log(`Number: ${number}`);
-        console.log(`Voice: ${voice}`);
-        console.log(`Background Noise: ${backgroundNoise}`);
-
-
         const sendPayload = {
             phone_number: number,
             task: prompt,
             voice: aiVoice,
-            background_track: background
+            background_track: background,
+            webhook: process.env.webhookUrl
         };
-
 
         const options = {
             method: 'POST',
@@ -152,55 +208,38 @@ app.post('/sendaicall', async (req, res) => {
 
         const callResponse = await fetch('https://api.bland.ai/v1/calls', options);
 
-        // Handle call API errors
         if (!callResponse.ok) {
-
             const errorBody = await callResponse.text();
             console.log(`API Error Response: ${errorBody}`);
-
-            return res.status(404).json({
-                message: `call API Error: ${callResponse.status} - ${callResponse.statusText}`
-            });
+            return res.status(404).json({ message: `call API Error: ${callResponse.status}` });
         }
 
-        // Parse and log the call AI response
         const callResult = await callResponse.json();
-        console.log("call AI Response:", callResult);
+        const callId = callResult.call_id;
 
-        callId = callResult.call_id;
+        // Send SMS
+        const smsMessage = `Your AI call was initiated. Call ID: ${callId}. Visit something.com for details.`;
+        console.log("Sending SMS via Twilio...");
+        await sendSMS(number, smsMessage);
 
-        const sms = `Hello! Great to see you trying out our New and Exciting AI Call Agent. If you want to see your call details, try something dot com and input your call id ${callId}. 
-        
-        Regards,
-        Bajhi`;
-
-        console.log("sending sms by twilio");
-        await sendSMS(number, sms)
-
-        // Send success response to client
         res.status(200).json({
-            message: "Call initiated successfully and Call ID sent.",
+            message: "Call initiated and Call ID sent via SMS.",
             callId,
             callResult
         });
-    } catch (error) {
-        console.error("An error occurred:", error);
 
-        // Send error response to client
-        res.status(500).json({
-            message: "An error occurred while processing the request.",
-            error: error.message // Include error message for debugging
-        });
+    } catch (error) {
+        console.error("Error in /sendaicall:", error);
+        res.status(500).json({ message: "Server error", error: error.message });
     }
 });
 
 
-app.post('/getcalldetails', async (req, res) => {
-    
+app.post('/addtosheet', async (req, res) => {
+
     try {
 
-        const idCall = req.body.callId
-        
+        /*
         const options = {
             method: 'GET',
             headers: {
@@ -209,7 +248,79 @@ app.post('/getcalldetails', async (req, res) => {
             },
         };
 
-        const callDetails = await fetch(`https://api.bland.ai/v1/calls/${idCall}`, options);
+        const callDetails = await fetch(`https://api.bland.ai/v1/calls?to=${number}&ascending=false`, options);
+
+        if (!callDetails.ok) {
+            throw new Error(`API request failed: ${callDetails.status} - ${callDetails.statusText}`);
+        }
+
+        const callData = await callDetails.json();
+        console.log(callData); */
+
+        console.log("req from addtosheet \n", req)
+
+        const { call_id, to, from, started_at, end_at, summary, price, call_ended_by, status, transcripts } = req.body;
+
+        // Process date, time, and duration
+        const infoDateTime = processDateTime(started_at, end_at);
+        const structuredTranscript = transcripts ? formatTranscripts(transcripts) : [];
+
+        const { startTime, startDate, endTime, endDate, duration } = infoDateTime;
+
+        // Combine call data
+        const formattedData = {
+            call_id,
+            to,
+            from,
+            startTime,
+            startDate,
+            endTime,
+            endDate,
+            duration,
+            summary,
+            price,
+            call_ended_by,
+            status,
+            structuredTranscript, // Include transcript if needed
+        };
+
+        // Save call details to Google Sheet
+        await appendToSheet(formattedData);
+
+        // Send response
+        res.json({
+            message: "Call data successfully stored in Google Sheets",
+            callData: formattedData,
+        });
+
+    } catch (error) {
+        console.error('Error fetching call details:', error);
+        res.status(500).json({ error: 'Internal Server Error', details: error.message });
+    }
+    ``
+
+
+})
+
+
+app.post('/getcalldetails', async (req, res) => {
+
+    try {
+
+        const number = req.body.number
+
+        
+        console.log("req \n", req);
+
+        const options = {
+            method: 'GET',
+            headers: {
+                'Authorization': callKey,
+                'Content-Type': 'application/json',
+            },
+        };
+
+        const callDetails = await fetch(`https://api.bland.ai/v1/calls?to=${number}&ascending=false`, options);
         const callData = await callDetails.json();
 
         console.log(callData);
