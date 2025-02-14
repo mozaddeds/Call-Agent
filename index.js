@@ -239,26 +239,6 @@ app.post('/addtosheet', async (req, res) => {
 
     try {
 
-        /*
-        const options = {
-            method: 'GET',
-            headers: {
-                'Authorization': callKey,
-                'Content-Type': 'application/json',
-            },
-        };
-
-        const callDetails = await fetch(`https://api.bland.ai/v1/calls?to=${number}&ascending=false`, options);
-
-        if (!callDetails.ok) {
-            throw new Error(`API request failed: ${callDetails.status} - ${callDetails.statusText}`);
-        }
-
-        const callData = await callDetails.json();
-        console.log(callData); */
-
-        console.log("req from addtosheet \n", req)
-
         const { call_id, to, from, started_at, end_at, summary, price, call_ended_by, status, transcripts } = req.body;
 
         // Process date, time, and duration
@@ -326,14 +306,6 @@ app.post('/getcalldetails', async (req, res) => {
         const getCallDetails = await fetch(`https://api.bland.ai/v1/calls/${c_id}`, options)
 
         const callDetails = await getCallDetails.json();
-
-        console.log("call data \n", callDetails);
-
-        // console.log("call details \n\n", callDetails)
-
-        
-
-        
 
         const { call_id, to, from, started_at, end_at, summary, price, call_ended_by, status, transcripts } = callDetails;
 
