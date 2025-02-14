@@ -45,18 +45,18 @@ async function appendToSheet(data) {
         // Format the data as a 2D array for Google Sheets
         const values = [
             [
-                data.call_id, 
-                data.to, 
-                data.from, 
-                data.startTime, 
-                data.startDate, 
-                data.endTime, 
-                data.endDate, 
-                data.duration, 
-                data.summary, 
-                data.price, 
-                data.call_ended_by, 
-                data.status, 
+                data.call_id,
+                data.to,
+                data.from,
+                data.startTime,
+                data.startDate,
+                data.endTime,
+                data.endDate,
+                data.duration,
+                data.summary,
+                data.price,
+                data.call_ended_by,
+                data.status,
                 structuredTranscriptStr  // Adding the structured transcript as a string
             ]
         ];
@@ -297,15 +297,21 @@ app.post('/getcalldetails', async (req, res) => {
             },
         };
 
+        // change here from const lastcall to getcallDetails.json
+
         const lastCall = await fetch(`https://api.bland.ai/v1/calls?to=${number}&ascending=false`, options);
-
-        
         const callData = await lastCall.json();
-        const c_id = callData.calls[0].c_id;
-        
-        const getCallDetails = await fetch(`https://api.bland.ai/v1/calls/${c_id}`, options)
 
+        // Check if calls exist
+        if (!callData.calls || callData.calls.length === 0) {
+            return res.status(404).json({ error: 'No call records found for this number.' });
+        }
+
+        const c_id = callData.calls[0].c_id;  // ✅ This will now always be valid
+
+        const getCallDetails = await fetch(`https://api.bland.ai/v1/calls/${c_id}`, options);
         const callDetails = await getCallDetails.json();
+
 
         const { call_id, to, from, started_at, end_at, summary, price, call_ended_by, status, transcripts } = callDetails;
 
