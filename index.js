@@ -343,12 +343,27 @@ app.post('/getcalldetails', async (req, res) => {
             structuredTranscript
         };
 
-        console.log("lastcalldata ", lastCallData);
+        console.log("Sending data to webhook: ", lastCallData);
 
-        // Send limited response
-        res.json({
-            lastCallData
+        // Send data to webhook
+        const webhookResponse = await fetch(process.env.wpwebhook, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(lastCallData)
         });
+
+        if (!webhookResponse.ok) {
+            console.error("Failed to send data to webhook:", await webhookResponse.text());
+            return res.status(500).json({ error: "Failed to send data to webhook." });
+        }
+
+        console.log("Data successfully sent to webhook.");
+
+        // Send success response
+        res.json({ message: "Data successfully sent to webhook." });
+
 
     } catch (error) {
         console.error('Error fetching call details:', error);
