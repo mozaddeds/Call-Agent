@@ -31,19 +31,19 @@ async function authorize() {
 }
 
 
-async function appendToSheet(data) {
+async function insertAtTop(data) {
     try {
         const auth = await authorize();
         const sheets = google.sheets({ version: 'v4', auth });
 
-        const spreadsheetId = process.env.spreadsheetId; // Replace with your Google Sheet ID
-        const range = 'Sheet1!A2:N'; // Start from row 2 to avoid overwriting headers
+        const spreadsheetId = process.env.spreadsheetId;
+        const sheetName = "Sheet1";
 
-        // Convert structuredTranscript to a string or JSON string (depending on what you need)
+        // Convert structuredTranscript to a string
         const structuredTranscriptStr = JSON.stringify(data.structuredTranscript);
 
-        // Format the data as a 2D array for Google Sheets
-        const values = [
+        // Format data as a 2D array for Google Sheets
+        const newRow = [
             [
                 data.call_id,
                 data.to,
@@ -57,25 +57,35 @@ async function appendToSheet(data) {
                 data.price,
                 data.call_ended_by,
                 data.status,
-                structuredTranscriptStr  // Adding the structured transcript as a string
+                structuredTranscriptStr
             ]
         ];
 
-        const request = {
+        // 1️⃣ Fetch existing data from the sheet
+        const getResponse = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range,
-            valueInputOption: 'RAW',
-            insertDataOption: 'INSERT_ROWS',
-            resource: { values },
-        };
+            range: `${sheetName}!A:N`,
+        });
 
-        const response = await sheets.spreadsheets.values.append(request);
-        console.log('Data successfully added to Google Sheet:', response.data);
+        let rows = getResponse.data.values || [];
+
+        // 2️⃣ Insert latest data at row 2:2
+        rows.splice(0, 0, newRow[0]); // Insert new row at the top
+
+        // 3️⃣ Update the sheet with modified data
+        await sheets.spreadsheets.values.update({
+            spreadsheetId,
+            range: `${sheetName}!A:N`,
+            valueInputOption: "RAW",
+            requestBody: { values: rows },
+        });
+
+        console.log("✅ Latest call data inserted at the top of Google Sheet.");
+
     } catch (error) {
-        console.error('Error appending data to Google Sheet:', error);
+        console.error("❌ Error updating Google Sheet:", error);
     }
 }
-
 
 
 function processDateTime(startTimestamp, endTimestamp = null) {
@@ -236,9 +246,7 @@ app.post('/sendaicall', async (req, res) => {
 
 
 app.post('/addtosheet', async (req, res) => {
-
     try {
-
         const { call_id, to, from, started_at, end_at, summary, price, call_ended_by, status, transcripts } = req.body;
 
         // Process date, time, and duration
@@ -247,7 +255,7 @@ app.post('/addtosheet', async (req, res) => {
 
         const { startTime, startDate, endTime, endDate, duration } = infoDateTime;
 
-        // Combine call data
+        // Format call data
         const formattedData = {
             call_id,
             to,
@@ -261,26 +269,22 @@ app.post('/addtosheet', async (req, res) => {
             price,
             call_ended_by,
             status,
-            structuredTranscript, // Include transcript if needed
+            structuredTranscript,
         };
 
-        // Save call details to Google Sheet
-        await appendToSheet(formattedData);
+        // Insert latest data at the top of the sheet
+        await insertAtTop(formattedData);
 
-        // Send response
         res.json({
-            message: "Call data successfully stored in Google Sheets",
+            message: "Call data successfully stored in Google Sheets at the top",
             callData: formattedData,
         });
 
     } catch (error) {
-        console.error('Error fetching call details:', error);
+        console.error('Error adding call details to sheet:', error);
         res.status(500).json({ error: 'Internal Server Error', details: error.message });
     }
-    ``
-
-
-})
+});
 
 
 app.post('/getcalldetails', async (req, res) => {
