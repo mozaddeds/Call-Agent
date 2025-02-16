@@ -228,7 +228,7 @@ app.post('/sendaicall', async (req, res) => {
         const callId = callResult.call_id;
 
         // Send SMS
-        const smsMessage = `Your AI call was initiated. Call ID: ${callId}. Visit something.com for details.`;
+        const smsMessage = `Hello! We are really excited to have you with us. Let's create AI Agent Caller and advance to exciting future. Please visit parrotgpt.ai for more about AI Agent Calling! Welcome aboard!`;
         console.log("Sending SMS via Twilio...");
         await sendSMS(number, smsMessage);
 
