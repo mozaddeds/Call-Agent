@@ -17,7 +17,6 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-
 const callKey = process.env.callKey
 
 const credentialsPath = './credentials.json';
@@ -37,7 +36,7 @@ async function insertAtTop(data) {
         const sheets = google.sheets({ version: 'v4', auth });
 
         const spreadsheetId = process.env.spreadsheetId;
-        const sheetName = "Sheet1";
+        const sheetName = "allInfo";
 
         // Convert structuredTranscript to a string
         const structuredTranscriptStr = JSON.stringify(data.structuredTranscript);
@@ -49,9 +48,8 @@ async function insertAtTop(data) {
                 data.to,
                 data.from,
                 data.startTime,
-                data.startDate,
                 data.endTime,
-                data.endDate,
+                data.finalDate,  // ✅ Replaced endDate with finalDate (since both were merged)
                 data.duration,
                 data.summary,
                 data.price,
@@ -60,11 +58,12 @@ async function insertAtTop(data) {
                 structuredTranscriptStr
             ]
         ];
+        
 
         // 1️⃣ Fetch existing data from the sheet
         const getResponse = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: `${sheetName}!A:N`,
+            range: `${sheetName}!A:M`,
         });
 
         let rows = getResponse.data.values || [];
@@ -75,7 +74,7 @@ async function insertAtTop(data) {
         // 3️⃣ Update the sheet with modified data
         await sheets.spreadsheets.values.update({
             spreadsheetId,
-            range: `${sheetName}!A:N`,
+            range: `${sheetName}!A:M`,
             valueInputOption: "RAW",
             requestBody: { values: rows },
         });
@@ -104,15 +103,15 @@ function processDateTime(startTimestamp, endTimestamp = null) {
         ];
         const month = months[date.getMonth()];
         const year = date.getFullYear();
-        const formattedDate = `${day} ${month}, ${year}`;
+        const finalDate = `${day} ${month}, ${year}`;  // 🛠️ Unified single date format
 
-        return { formattedTime, formattedDate };
+        return { formattedTime, finalDate };
     }
 
     const start = formatDateTime(startTimestamp);
     let result = {
         startTime: start.formattedTime,
-        startDate: start.formattedDate
+        finalDate: start.finalDate  // ✅ Using finalDate instead of startDate
     };
 
     if (endTimestamp) {
@@ -125,12 +124,12 @@ function processDateTime(startTimestamp, endTimestamp = null) {
         const duration = `${durationMinutes} minutes ${durationSeconds} seconds`;
 
         result.endTime = end.formattedTime;
-        result.endDate = end.formattedDate;
         result.duration = duration;
     }
 
     return result;
 }
+
 
 function formatTranscripts(transcripts) {
     function formatTimestamp(timestamp) {
@@ -176,9 +175,6 @@ async function sendSMS(to, message) {
         console.error("Twilio SMS Error: ", error.message);
     }
 }
-
-
-
 
 let lastCallData = null;
 let callId = null;
@@ -229,7 +225,7 @@ app.post('/sendaicall', async (req, res) => {
 
         // Send SMS
         const smsMessage = `Hello! We are really excited to have you with us. Let's create AI Agent Caller and advance to exciting future. Please visit parrotgpt.ai for more about AI Agent Calling! Welcome aboard!`;
-        console.log("Sending SMS via Twilio...");
+        console.log(`sending sms via twilio...`);
         await sendSMS(number, smsMessage);
 
         res.status(200).json({
@@ -253,7 +249,8 @@ app.post('/addtosheet', async (req, res) => {
         const infoDateTime = processDateTime(started_at, end_at);
         const structuredTranscript = transcripts ? formatTranscripts(transcripts) : [];
 
-        const { startTime, startDate, endTime, endDate, duration } = infoDateTime;
+        const { startTime, finalDate, endTime, duration } = infoDateTime;
+
 
         // Format call data
         const formattedData = {
@@ -261,9 +258,8 @@ app.post('/addtosheet', async (req, res) => {
             to,
             from,
             startTime,
-            startDate,
+            finalDate,  // ✅ Now using finalDate instead of separate startDate and endDate
             endTime,
-            endDate,
             duration,
             summary,
             price,
@@ -271,6 +267,7 @@ app.post('/addtosheet', async (req, res) => {
             status,
             structuredTranscript,
         };
+        
 
         // Insert latest data at the top of the sheet
         await insertAtTop(formattedData);
@@ -312,6 +309,8 @@ app.post('/getcalldetails', async (req, res) => {
             return res.status(404).json({ error: 'No call records found for this number.' });
         }
 
+        console.log(callData.calls)
+
         const c_id = callData.calls[0].c_id;  // ✅ This will now always be valid
 
 
@@ -326,9 +325,8 @@ app.post('/getcalldetails', async (req, res) => {
         const infoDateTime = processDateTime(started_at, end_at);
         const structuredTranscript = formatTranscripts(transcripts);
 
-        const { startTime, startDate, endTime, endDate, duration } = infoDateTime;
+        const { startTime, finalDate, endTime, duration } = infoDateTime;
 
-        console.log("info date time ", infoDateTime);
 
         // Store call data for the `/calldetails` endpoint
         lastCallData = {
@@ -336,9 +334,8 @@ app.post('/getcalldetails', async (req, res) => {
             to,
             from,
             startTime,
-            startDate,
+            finalDate,  // ✅ Using finalDate instead of startDate and endDate
             endTime,
-            endDate,
             duration,
             summary,
             price,
@@ -346,6 +343,8 @@ app.post('/getcalldetails', async (req, res) => {
             status,
             structuredTranscript
         };
+        
+
 
         console.log("Sending data to webhook: ", lastCallData);
 
@@ -375,6 +374,25 @@ app.post('/getcalldetails', async (req, res) => {
     }
 });
 
+
+app.post('/stopcall', async (req, res) => {
+
+    const callId = req.body.callId
+
+    const options = {
+        method: 'POST',
+        headers: {
+            'Authorization': callKey,
+            'Content-Type': 'application/json',
+        },
+    };
+
+    const stopCall = await fetch(`https://api.bland.ai/v1/calls/${call_id}/stop`, options)
+
+    const stopCallResponse = stopCall.json()
+    console.log(stopCall)
+
+})
 
 
 app.listen(port, () => {
