@@ -276,12 +276,7 @@ app.post('/addtosheet', async (req, res) => {
         const smsMessage = `Hello! our call durations was ${postCallData.duration} and summary -
         ${postCallData.summary}`;
         console.log(`sending sms via twilio...`);
-        await sendSMS(postCallData.to, smsMessage);
-
-        res.status(200).json({
-            message: "Call initiated and Call ID sent via SMS."
-        });
-        
+        await sendSMS(postCallData.to, smsMessage);        
 
         // Insert latest data at the top of the sheet
         await insertAtTop(formattedData);
