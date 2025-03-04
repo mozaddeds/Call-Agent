@@ -279,9 +279,7 @@ app.post('/addtosheet', async (req, res) => {
         await sendSMS(postCallData.to, smsMessage);
 
         res.status(200).json({
-            message: "Call initiated and Call ID sent via SMS.",
-            callId,
-            callResult
+            message: "Call initiated and Call ID sent via SMS."
         });
         
 
