@@ -21,6 +21,8 @@ const callKey = process.env.callKey
 
 const credentialsPath = './credentials.json';
 
+let postCallData = null;
+
 async function authorize() {
     const credentials = JSON.parse(await readFile(credentialsPath, 'utf8'));
     const { client_email, private_key } = credentials;
@@ -267,6 +269,20 @@ app.post('/addtosheet', async (req, res) => {
             status,
             structuredTranscript,
         };
+
+        postCallData = formattedData;
+
+        // Send SMS
+        const smsMessage = `Hello! our call durations was ${postCallData.duration} and summary -
+        ${postCallData.summary}`;
+        console.log(`sending sms via twilio...`);
+        await sendSMS(postCallData.to, smsMessage);
+
+        res.status(200).json({
+            message: "Call initiated and Call ID sent via SMS.",
+            callId,
+            callResult
+        });
         
 
         // Insert latest data at the top of the sheet
