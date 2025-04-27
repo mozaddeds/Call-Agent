@@ -201,8 +201,8 @@ app.post('/sendaicall', async (req, res) => {
             phone_number: number,
             task: prompt,
             voice: aiVoice,
-            background_track: background,
-            webhook: process.env.webhookUrl
+            background_track: background
+            // webhook: process.env.webhookUrl
         };
 
         const options = {
